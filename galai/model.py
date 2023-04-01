@@ -40,10 +40,10 @@ class Model(object):
             Path for the checkpoint (str)
         """
         self.config = OPTConfig.from_pretrained(checkpoint_path)
-        
+
         with init_empty_weights():
             self.model = OPTForCausalLM(self.config)
-        
+
         self.model.tie_weights()
 
         device_map = {
@@ -51,14 +51,14 @@ class Model(object):
             'decoder.embed_positions': 0, 
             'decoder.layer_norm': 0,
         }
-        
+
         n_layers = self.config.num_hidden_layers
-        
+
         for i in range(n_layers):
             device_map[f"decoder.layers.{i}"] = i * self.num_gpus // n_layers
 
         if 'mini' in checkpoint_path or 'base' in checkpoint_path:
-            checkpoint_path = checkpoint_path + '/pytorch_model.bin'
+            checkpoint_path += '/pytorch_model.bin'
 
         load_checkpoint_and_dispatch(
             self.model.model, 

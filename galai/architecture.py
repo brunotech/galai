@@ -79,12 +79,7 @@ def make_positions(mask, padding_idx: int):
 
     Position numbers begin at padding_idx+1. Padding symbols are ignored.
     """
-    # The series of casts and type-conversions here are carefully
-    # balanced to both work with ONNX export and XLA. In particular XLA
-    # prefers ints, cumsum defaults to output longs, and ONNX doesn't know
-    # how to handle the dtype kwarg in cumsum.
-    positions = (torch.cumsum(mask, dim=1).type_as(mask) * mask).long() + padding_idx
-    return positions
+    return (torch.cumsum(mask, dim=1).type_as(mask) * mask).long() + padding_idx
 
 
 
@@ -105,7 +100,7 @@ class OPTLearnedPositionalEmbedding(nn.Embedding):
 
     def forward(self, attention_mask: Tensor, positions: Optional[Tensor] = None):
         # attention_masks is expected to be of size [batch_size x seq_len].
-        if not ((positions is None) or (self.padding_idx is None)):
+        if positions is not None and self.padding_idx is not None:
             raise ValueError("If positions is pre-computed then padding_idx should not be set.")
 
         if positions is None:
@@ -513,11 +508,7 @@ class OPTDecoder(OPTPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.word_embed_proj_dim, self.padding_idx)
-        if config.scale_embeddings:
-            self.embed_scale = config.hidden_size**0.5 # force Thomas
-        else:
-            self.embed_scale = 1.0
-
+        self.embed_scale = config.hidden_size**0.5 if config.scale_embeddings else 1.0
         # OPT is set up so that if padding_idx is specified then offset the embedding ids by 2
         if self.padding_idx is not None:
             num_embeddings = config.max_position_embeddings + 2
@@ -531,8 +522,8 @@ class OPTDecoder(OPTPreTrainedModel):
                 self.padding_idx,
                 init_size=num_embeddings + self.padding_idx + 1,
             )
-        
-        
+
+
         if config.word_embed_proj_dim != config.hidden_size:
             self.project_out = nn.Linear(config.hidden_size, config.word_embed_proj_dim, bias=False)
         else:
@@ -542,7 +533,7 @@ class OPTDecoder(OPTPreTrainedModel):
             self.project_in = nn.Linear(config.word_embed_proj_dim, config.hidden_size, bias=False)
         else:
             self.project_in = None
-        
+
         self.layer_norm = nn.LayerNorm(config.hidden_size, elementwise_affine=config.layer_norm_elementwise_affine) # force thomas
         self.layers = nn.ModuleList([OPTDecoderLayer(config) for _ in range(config.num_hidden_layers)])
 
@@ -683,11 +674,10 @@ class OPTDecoder(OPTPreTrainedModel):
 
         # check if head_mask has a correct number of layers specified if desired
         for attn_mask, mask_name in zip([head_mask], ["head_mask"]):
-            if attn_mask is not None:
-                if attn_mask.size()[0] != (len(self.layers)):
-                    raise ValueError(
-                        f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
-                    )
+            if attn_mask is not None and attn_mask.size()[0] != (len(self.layers)):
+                raise ValueError(
+                    f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                )
 
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -743,7 +733,7 @@ class OPTDecoder(OPTPreTrainedModel):
         # force thomas
         if self.layer_norm is not None:
             hidden_states = self.layer_norm(hidden_states)
-        
+
         if self.project_out is not None:
             hidden_states = self.project_out(hidden_states)
 
@@ -752,13 +742,24 @@ class OPTDecoder(OPTPreTrainedModel):
             all_hidden_states += (hidden_states,)
 
         next_cache = next_decoder_cache if use_cache else None
-        if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
-        return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=next_cache,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
+        return (
+            BaseModelOutputWithPast(
+                last_hidden_state=hidden_states,
+                past_key_values=next_cache,
+                hidden_states=all_hidden_states,
+                attentions=all_self_attns,
+            )
+            if return_dict
+            else tuple(
+                v
+                for v in [
+                    hidden_states,
+                    next_cache,
+                    all_hidden_states,
+                    all_self_attns,
+                ]
+                if v is not None
+            )
         )
 
 
@@ -824,14 +825,15 @@ class OPTModel(OPTPreTrainedModel):
             return_dict=return_dict,
         )
 
-        if not return_dict:
-            return decoder_outputs
-
-        return BaseModelOutputWithPast(
-            last_hidden_state=decoder_outputs.last_hidden_state,
-            past_key_values=decoder_outputs.past_key_values,
-            hidden_states=decoder_outputs.hidden_states,
-            attentions=decoder_outputs.attentions,
+        return (
+            BaseModelOutputWithPast(
+                last_hidden_state=decoder_outputs.last_hidden_state,
+                past_key_values=decoder_outputs.past_key_values,
+                hidden_states=decoder_outputs.hidden_states,
+                attentions=decoder_outputs.attentions,
+            )
+            if return_dict
+            else decoder_outputs
         )
 
 
@@ -1117,10 +1119,9 @@ class SinusoidalPositionalEmbedding(nn.Module):
             embedding_shape = torch.cat(
                 (bsz.view(1), seq_len.view(1), torch.tensor([-1], dtype=torch.long))
             )
-            embeddings = torch.onnx.operators.reshape_from_tensor_shape(
+            return torch.onnx.operators.reshape_from_tensor_shape(
                 flat_embeddings, embedding_shape
             )
-            return embeddings
         return (
             self.weights.index_select(0, positions.view(-1))
             .view(bsz, seq_len, -1)

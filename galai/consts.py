@@ -62,9 +62,9 @@ HUGE_FILES = [
 ]
 
 CHECKPOINT_PATHS = {
-    'mini': [WEIGHT_DIR + '/125m/' + file for file in MINI_FILES],
-    'base': [WEIGHT_DIR + '/1.3b/' + file for file in BASE_FILES],
-    'standard': [WEIGHT_DIR + '/6.7b/' + file for file in STANDARD_FILES],
-    'large': [WEIGHT_DIR + '/30b/' + file for file in LARGE_FILES],
-    'huge': [WEIGHT_DIR + '/120b/' + file for file in HUGE_FILES]
+    'mini': [f'{WEIGHT_DIR}/125m/{file}' for file in MINI_FILES],
+    'base': [f'{WEIGHT_DIR}/1.3b/{file}' for file in BASE_FILES],
+    'standard': [f'{WEIGHT_DIR}/6.7b/{file}' for file in STANDARD_FILES],
+    'large': [f'{WEIGHT_DIR}/30b/{file}' for file in LARGE_FILES],
+    'huge': [f'{WEIGHT_DIR}/120b/{file}' for file in HUGE_FILES],
 }

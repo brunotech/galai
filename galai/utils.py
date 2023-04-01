@@ -12,7 +12,7 @@ CUSTOM_SEQ_RE = re.compile(r"(\[START_(DNA|SMILES|I_SMILES|AMINO)])(.*?)(\[END_\
 # corpus cleaning step and removed in pretokenization. The digits are added to increase the chance
 # that they do not occur in the corpus. The digits are escaped so that the token does not appear
 # literally in the source code in case we ever include it in the training data.
-SPLIT_MARKER = f"SPL{1}T-TH{1}S-Pl3A5E"
+SPLIT_MARKER = 'SPL1T-TH1S-Pl3A5E'
 
 ENV_TORCH_HOME = 'TORCH_HOME'
 ENV_XDG_CACHE_HOME = 'XDG_CACHE_HOME'
@@ -53,11 +53,14 @@ def escape_custom_split_sequence(text):
     return CUSTOM_SEQ_RE.sub(_insert_split_marker, text)
 
 def _get_cache_home():
-    cache_home = os.path.expanduser(
-        os.getenv(ENV_TORCH_HOME,
-                  os.path.join(os.getenv(ENV_XDG_CACHE_HOME,
-                                         DEFAULT_CACHE_DIR), 'galactica')))
-    return cache_home
+    return os.path.expanduser(
+        os.getenv(
+            ENV_TORCH_HOME,
+            os.path.join(
+                os.getenv(ENV_XDG_CACHE_HOME, DEFAULT_CACHE_DIR), 'galactica'
+            ),
+        )
+    )
 
 
 class DownloadProgressBar(tqdm.tqdm):
@@ -113,10 +116,10 @@ def get_checkpoint_path(model_name: str) -> str:
             if not os.path.exists(file_name):
                 print('Incomplete files for model; downloading')
                 download_model(model_name=model_name, model_path=model_path)
-        return model_path
     else:
         download_model(model_name=model_name, model_path=model_path)
-        return model_path
+
+    return model_path
 
 def get_tokenizer_path() -> str:
     """
@@ -142,7 +145,7 @@ def get_tokenizer_path() -> str:
         if not os.path.exists(file_name):
             print('Incomplete files for tokenizer; downloading')
             download_tokenizer(file_name)
-        return file_name
     else:
         download_tokenizer(file_name)
-        return file_name
+
+    return file_name
